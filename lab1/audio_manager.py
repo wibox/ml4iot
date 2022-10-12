@@ -1,4 +1,3 @@
-from numpy import size
 import scipy.io.wavfile as siw
 import sounddevice as sd
 import time as t

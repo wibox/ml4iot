@@ -1,0 +1,5 @@
+early stages of audio manager and battery monitor;
+redis connection examples for key-value pairs and timeseries.
+
+completion of redis implementation into battery_monitor.py and deepnote missing.
+
