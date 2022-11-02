@@ -11,11 +11,18 @@ def get_audio_and_label(filename: str):
     audio_padded = tf.concat([audio, zero_padding], axis = 0)
     return audio, sampling_rate, label
 
+def get_audio_from_numpy(indata):
+    indata = tf.convert_to_tensor(indata, dtype=tf.float32)
+    indata = (indata + 32768) / (32767 + 32768)
+    indata = tf.squeeze(indata)
+    return indata
+
 def get_spectrogram(
     nparray,
     downsampling_rate, 
     frame_length_in_s, 
-    frame_step_in_s): 
+    frame_step_in_s,
+    sampling_rate): 
     
     # come cristo si fa il downsampling (hp m/n * sampling_rate)
 
@@ -36,7 +43,7 @@ def get_spectrogram(
     #zero_padding = tf.zeros(tf.shape(audio))
     #audio_padded = tf.concat([audio, zero_padding], axis=0)
 
-    audio_padded, sampling_rate, label = get_audio_from_numpy(nparray)
+    audio_padded = get_audio_from_numpy(nparray)
 
     if sampling_rate != downsampling_rate:
         sampling_rate_int64 = tf.cast(sampling_rate, tf.int64)
@@ -56,7 +63,7 @@ def get_spectrogram(
 
     spectrogram = tf.abs(stft)
 
-    return spectrogram, sampling_rate, label
+    return spectrogram, sampling_rate
     
 def get_log_mel_spectrogram(
     filename,

@@ -17,27 +17,24 @@ parser.add_argument("--device", type=int, default=0)
 args = parser.parse_args()
 
 print("Recording...")
-
-def get_audio_from_numpy(indata):
-    indata = tf.convert_to_tensor(indata, dtype=tf.float32)
-    indata = (indata + 32768) / (32767 + 32768)
-    indata = tf.squeeze(indata)
-    return indata
-
 def callback(indata, frames, callback_time, status):
-    mydata = np.array(indata[1], dtype=float)
-    if is_silence(npdata=mydata, downsampling_rate=16000, frame_length_in_s=0.4, dbFSthresh=-100, duration_time=0.01):
+    #mydata = np.array(indata[1], dtype=float)
+    mydata = get_audio_from_numpy(indata)
+    if not is_silence(npdata=mydata, downsampling_rate=16000, frame_length_in_s=0.4, dbFSthresh=-100, duration_time=0.01, sampling_rate= args.sampling_rate):
+        print("saving_audio")
         timestamp = t.time()
         siw.write(filename=f"recordings/{timestamp}.wav", rate=args.sampling_rate, data=indata)
 
-def is_silence(npdata, downsampling_rate, frame_length_in_s, dbFSthresh, duration_time):
-    audio = get_audio_from_numpy(npdata)
+
+def is_silence(npdata, downsampling_rate, frame_length_in_s, dbFSthresh, duration_time, sampling_rate):
+    #audio = get_audio_from_numpy(npdata)
     #print(type(audio))
-    spectrogram, _, _ = get_spectrogram(
-        audio,
+    spectrogram, _ = get_spectrogram(
+        npdata,
         downsampling_rate,
         frame_length_in_s,
-        frame_length_in_s
+        frame_length_in_s,
+        sampling_rate
     )
     dbFS = 20 * tf.math.log(spectrogram + 1.e-6)
     energy = tf.math.reduce_mean(dbFS, axis=1)
@@ -56,4 +53,3 @@ with sd.InputStream(device=args.device, channels=args.num_channels, samplerate=a
         if key in ["Q", "q"]:
             print("Stopping recording.")
             break
-
