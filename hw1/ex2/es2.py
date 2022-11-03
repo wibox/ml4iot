@@ -4,18 +4,21 @@ from datetime import datetime
 import uuid
 import redis
 from time import time
+import argparse
 
-REDIS_HOST = "redis-15072.c77.eu-west-1-1.ec2.cloud.redislabs.com"
-REDIS_PORT = 15072
-REDIS_USER = "default"
-REDIS_PASSWORD = "53R8YAlL81zAHIEVcPjwjzcnVQoSPhzt"
+parser = argparse.ArgumentParser()
+parser.add_argument("--host", type = str, default = "redis-15072.c77.eu-west-1-1.ec2.cloud.redislabs.com")
+parser.add_argument("--port", type = int, default = 15072)
+parser.add_argument("--user", type = str, default = "default")
+parser.add_argument("--password", type = str, default = "53R8YAlL81zAHIEVcPjwjzcnVQoSPhzt")
+args = parser.parse_args()
 
 
 redis_client = redis.Redis(
-    host=REDIS_HOST,
-    port=REDIS_PORT,
-    password=REDIS_PASSWORD,
-    username=REDIS_USER
+    host=args.host,
+    port=args.port,
+    password=args.password,
+    username=args.user
 )
 print('Is connected:', redis_client.ping())
 
@@ -24,6 +27,20 @@ def safe_ts_create(key):
         redis_client.ts().create(key)
     except redis.ResponseError:
         pass
+        
+def safe_ts_createrule(key, key_agg, aggregation, bucket_size):
+    try:
+        redis_client.ts().createrule(
+            key, key_agg, 
+            aggregation_type = aggregation, 
+            bucket_size_msec = bucket_size)
+    except redis.ResponseError:
+        redis_client.ts().deleterule(key, key_agg)
+        redis_client.ts().createrule(
+            key, key_agg, 
+            aggregation_type = aggregation, 
+            bucket_size_msec = bucket_size)
+    
 
 mac_address = hex(uuid.getnode())
 safe_ts_create(f"{mac_address}:battery")
@@ -54,21 +71,24 @@ while True:
 
     # CHECK SE LA RULE ESISTE GIÀ
 
-    redis_client.ts().createrule(
-        f"{mac_address}:battery", f"{mac_address}:battery_avg", 
-        aggregation_type = "avg", 
-        bucket_size_msec = 5*1000) #### CONTROLLARE LA BUCKET SIZE
+    # redis_client.ts().createrule(
+    #     f"{mac_address}:battery", f"{mac_address}:battery_avg", 
+    #     aggregation_type = "avg", 
+    #     bucket_size_msec = 5*1000) #### CONTROLLARE LA BUCKET SIZE
 
-    redis_client.ts().createrule(
-        f"{mac_address}:power", f"{mac_address}:power_avg", 
-        aggregation_type = "avg", 
-        bucket_size_msec = 5*1000) #### CONTROLLARE LA BUCKET SIZE
+    # redis_client.ts().createrule(
+    #     f"{mac_address}:power", f"{mac_address}:power_avg", 
+    #     aggregation_type = "avg", 
+    #     bucket_size_msec = 5*1000) #### CONTROLLARE LA BUCKET SIZE
     
-    redis_client.ts().createrule(
-        f"{mac_address}:plugged_seconds", f"{mac_address}:plugged_seconds_avg", 
-        aggregation_type = "avg", 
-        bucket_size_msec = 5*1000) #### CONTROLLARE LA BUCKET SIZE
+    # redis_client.ts().createrule(
+    #     f"{mac_address}:plugged_seconds", f"{mac_address}:plugged_seconds_avg", 
+    #     aggregation_type = "avg", 
+    #     bucket_size_msec = 5*1000) #### CONTROLLARE LA BUCKET SIZE
 
+    safe_ts_createrule(f"{mac_address}:battery", f"{mac_address}:battery_avg", "avg", 5*1000)
+    safe_ts_createrule(f"{mac_address}:power", f"{mac_address}:power_avg", "avg", 5*1000)
+    safe_ts_createrule(f"{mac_address}:plugged_seconds", f"{mac_address}:plugged_seconds_avg", "avg", 5*1000)
 
     if redis_client.ts().info(f"{mac_address}:battery_avg").memory_usage/1e6 >= 5:
         if ret_time < time()-time_now:
