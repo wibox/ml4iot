@@ -68,23 +68,7 @@ while True:
     if time()-time_now == one_day_in_s:
         redis_client.ts().add(f"{mac_address}:plugged_seconds", ts_in_ms, sec_plug)
         time_now = time()
-
-    # CHECK SE LA RULE ESISTE GIÀ
-
-    # redis_client.ts().createrule(
-    #     f"{mac_address}:battery", f"{mac_address}:battery_avg", 
-    #     aggregation_type = "avg", 
-    #     bucket_size_msec = 5*1000) #### CONTROLLARE LA BUCKET SIZE
-
-    # redis_client.ts().createrule(
-    #     f"{mac_address}:power", f"{mac_address}:power_avg", 
-    #     aggregation_type = "avg", 
-    #     bucket_size_msec = 5*1000) #### CONTROLLARE LA BUCKET SIZE
-    
-    # redis_client.ts().createrule(
-    #     f"{mac_address}:plugged_seconds", f"{mac_address}:plugged_seconds_avg", 
-    #     aggregation_type = "avg", 
-    #     bucket_size_msec = 5*1000) #### CONTROLLARE LA BUCKET SIZE
+        sec_plug = 0
 
     safe_ts_createrule(f"{mac_address}:battery", f"{mac_address}:battery_avg", "avg", 5*1000)
     safe_ts_createrule(f"{mac_address}:power", f"{mac_address}:power_avg", "avg", 5*1000)
