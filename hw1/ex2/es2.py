@@ -52,7 +52,9 @@ safe_ts_create(f"{mac_address}:plugged_seconds_avg")
 one_day_in_s = 24*60*60
 time_now = time()
 sec_plug = 0
-ret_time = 0
+ret_time_battery = 0
+ret_time_power = 0
+ret_time_plugged = 0
 
 while True:
     ts_in_s = time()
@@ -75,18 +77,18 @@ while True:
     safe_ts_createrule(f"{mac_address}:plugged_seconds", f"{mac_address}:plugged_seconds_avg", "avg", 5*1000)
 
     if redis_client.ts().info(f"{mac_address}:battery_avg").memory_usage/1e6 >= 5:
-        if ret_time < time()-time_now:
-            ret_time = time()-time_now()
+        if ret_time_battery < time()-time_now:
+            ret_time_battery = time()-time_now()
         redis_client.ts().alter(f"{mac_address}:battery_avg", retention_msec = time()-time_now())
     
     if redis_client.ts().info(f"{mac_address}:power_avg").memory_usage/1e6 >= 5:
-        if ret_time < time()-time_now:
-            ret_time = time()-time_now()
+        if ret_time_power < time()-time_now:
+            ret_time_power = time()-time_now()
         redis_client.ts().alter(f"{mac_address}:power_avg", retention_msec = time()-time_now())
     
     if redis_client.ts().info(f"{mac_address}:plugged_seconds_avg").memory_usage/1e6 >= 1:
-        if ret_time < time()-time_now:
-            ret_time = time()-time_now()
+        if ret_time_plugged < time()-time_now:
+            ret_time_plugged = time()-time_now()
         redis_client.ts().alter(f"{mac_address}:plugged_seconds", retention_msec = time()-time_now())
 
     sleep(1)

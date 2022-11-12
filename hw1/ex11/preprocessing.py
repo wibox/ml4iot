@@ -4,8 +4,8 @@ import tensorflow_io as tfio
 def get_audio_and_label(filename: str):
     audio_binary = tf.io.read_file(filename)
     audio, sampling_rate = tf.audio.decode_wav(audio_binary)
-    fields = tf.strings.split(filename, "_")
-    label = fields[0]
+    label = filename.split("/")[1].split("_")[0]
+    #label = fields[0]
     audio = tf.squeeze(audio)
     zero_padding = tf.zeros(sampling_rate-tf.shape(audio), dtype = tf.float32)
     audio_padded = tf.concat([audio, zero_padding], axis = 0)

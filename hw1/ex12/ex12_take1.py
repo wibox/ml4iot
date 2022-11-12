@@ -13,14 +13,14 @@ parser.add_argument("--resolution", type = str, default = "int16")
 parser.add_argument("--sampling-rate", type = int, default = 16000)
 parser.add_argument("--num-channels", type = int, default = 1)
 parser.add_argument("--block_size", type = int, default = 16000)
-parser.add_argument("--device", type=int, default=0)
+parser.add_argument("--device", type=int, default=1)
 args = parser.parse_args()
 
 print("Recording...")
 def callback(indata, frames, callback_time, status):
     #mydata = np.array(indata[1], dtype=float)
     mydata = get_audio_from_numpy(indata)
-    if not is_silence(npdata=mydata, downsampling_rate=16000, frame_length_in_s=0.4, dbFSthresh=-100, duration_time=0.01, sampling_rate= args.sampling_rate):
+    if not is_silence(npdata=mydata, downsampling_rate=16000, frame_length_in_s=0.4, dbFSthresh=-200, duration_time=0.01, sampling_rate= args.sampling_rate):
         print("saving_audio")
         timestamp = t.time()
         siw.write(filename=f"recordings/{timestamp}.wav", rate=args.sampling_rate, data=indata)
