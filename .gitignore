@@ -1,5 +1,6 @@
 *.wav
 __pycache__
 .ipynb_checkpoints
-.vscode
-.DS_STORE
+*.vscode
+*.DS_STORE
+*.zip
