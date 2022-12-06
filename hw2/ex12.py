@@ -12,14 +12,6 @@ import scipy.io.wavfile as siw
 import os
 import numpy as np
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--host", type = str, default = "redis-15072.c77.eu-west-1-1.ec2.cloud.redislabs.com")
-parser.add_argument("--port", type = int, default = 15072)
-parser.add_argument("--user", type = str, default = "default")
-parser.add_argument("--password", type = str, default = "53R8YAlL81zAHIEVcPjwjzcnVQoSPhzt")
-parser.add_argument("--device", type = int, default = 1)  #### rivedere questo
-args = parser.parse_args()
-
 def safe_ts_create(redis_client, key):
     try:
         redis_client.ts().create(key)
@@ -145,13 +137,22 @@ def go_stop_classification(
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", type = str, default = "redis-15072.c77.eu-west-1-1.ec2.cloud.redislabs.com")
+    parser.add_argument("--port", type = int, default = 15072)
+    parser.add_argument("--user", type = str, default = "default")
+    parser.add_argument("--password", type = str, default = "53R8YAlL81zAHIEVcPjwjzcnVQoSPhzt")
+    parser.add_argument("--device", type = int, default = 1)  #### rivedere questo
+    args = parser.parse_args()
+
+    print("Connecting...")
+
     redis_client = redis.Redis(
         host = args.host, 
         password = args.password, 
         username = args.user, 
         port = args.port)
 
-    monitoring = False
 
     print("Is connected? ", redis_client.ping())
 
@@ -167,7 +168,6 @@ def main():
     safe_ts_create(redis_client, "mac_adress:battery")
     safe_ts_create(redis_client, "mac_adress:power")
 
-    flag = ""
 
     MODEL_NAME = 1670336541 #### NOME A OCCHIO
     interpreter = tf.lite.Interpreter(model_path=f'tflite_models/{MODEL_NAME}.tflite')
@@ -175,29 +175,35 @@ def main():
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
 
-    # DA AUTOMATIZZARE
-    downsampling_rate = 16000
-    sampling_rate_int64 = tf.cast(downsampling_rate, tf.int64)
-    frame_length = int(downsampling_rate * 0.04)
-    frame_step = int(downsampling_rate * 0.02)
-    spectrogram_width = (16000 - frame_length) // frame_step + 1
+    with open("spectrogram_results.csv", "r") as csvf:
+        header = next(csvf)
+        fields = csvf.split(",")
+        downsampling_rate = fields[0]
+        frame_length = fields[1]
+        frame_step = fields[2]
+        num_mel_bins = fields[3]
+        lower_frequency = fields[4]
+        upper_frequency = fields[5]
+
     num_spectrogram_bins = frame_length // 2 + 1
 
     linear_to_mel_weight_matrix = tf.signal.linear_to_mel_weight_matrix(
-        num_mel_bins = 40,
+        num_mel_bins = num_mel_bins,
         num_spectrogram_bins = num_spectrogram_bins,
         downsampling_rate = downsampling_rate,
-        lower_frequency = 20,
-        upper_frequency = 4000
+        lower_frequency = lower_frequency,
+        upper_frequency = upper_frequency
     )
 
-    # FINO QUA #######
-
+    monitoring = False
 
     with sd.InputStream(device=args.device, channels=1, samplerate=16000, dtype="int16", callback=callback, blocksize=16000):
+        print("Recording...")
         while True:
             tmp = time()
             if os.path.exists(f"recordings/{tmp}.wav"):
+
+                print("Classifying...")
 
                 predicted_label = go_stop_classification(
                     f"recordings/{tmp}.wav", 
@@ -211,10 +217,13 @@ def main():
                     LABELS = ["go","stop"])
 
                 if predicted_label == "go":
+                    print(predicted_label)
                     monitoring = True
                 elif predicted_label == "stop":
+                    print(predicted_label)
                     monitoring = False 
                 elif predicted_label == None:
+                    print("Label not found.")
                     continue
             
             if monitoring:
