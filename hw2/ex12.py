@@ -118,12 +118,18 @@ def go_stop_classification(
     )
     spectrogram = tf.abs(stft)
     mel_spectrogram = tf.matmul(spectrogram, linear_to_mel_weight_matrix)
+    # log_mel_spectrogram = tf.math.log(mel_spectrogram + 1.e-6)
+    # log_mel_spectrogram = tf.expand_dims(log_mel_spectrogram, 0)
+    # log_mel_spectrogram = tf.expand_dims(log_mel_spectrogram, -1)
+    # log_mel_spectrogram = tf.image.resize(log_mel_spectrogram, [32, 32])
     log_mel_spectrogram = tf.math.log(mel_spectrogram + 1.e-6)
-    log_mel_spectrogram = tf.expand_dims(log_mel_spectrogram, 0)
-    log_mel_spectrogram = tf.expand_dims(log_mel_spectrogram, -1)
-    log_mel_spectrogram = tf.image.resize(log_mel_spectrogram, [32, 32])
+    mfccs = mfccs = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrogram)[..., :13]
+    mfccs = tf.expand_dims(mfccs, 0)
+    mfccs = tf.expand_dims(mfccs, -1)
+    mfccs = tf.image.resize(mfccs, [32, 32])
     
-    interpreter.set_tensor(input_details[0]['index'], log_mel_spectrogram) 
+    #interpreter.set_tensor(input_details[0]['index'], log_mel_spectrogram) 
+    interpreter.set_tensor(input_details[0]['index'], mfccs) 
     interpreter.invoke()
     output = interpreter.get_tensor(output_details[0]['index'])
 
@@ -169,30 +175,40 @@ def main():
     safe_ts_create(redis_client, "mac_adress:power")
 
 
-    MODEL_NAME = 1670336541 #### NOME A OCCHIO
+    MODEL_NAME = 1671182140 #### NOME A OCCHIO
     interpreter = tf.lite.Interpreter(model_path=f'tflite_models/{MODEL_NAME}.tflite')
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
 
-    with open("spectrogram_results.csv", "r") as csvf:
-        header = next(csvf)
-        fields = csvf.split(",")
-        downsampling_rate = fields[0]
-        frame_length = fields[1]
-        frame_step = fields[2]
-        num_mel_bins = fields[3]
-        lower_frequency = fields[4]
-        upper_frequency = fields[5]
+    # with open("spectrogram_results.csv", "r") as csvf:
+    #     header = next(csvf)
+    #     fields = str(csvf).split(",")
+    #     print(fields)
+    #     downsampling_rate = fields[0]
+    #     frame_length = fields[1]
+    #     frame_step = fields[2]
+    #     num_mel_bins = fields[3]
+    #     lower_frequency = fields[4]
+    #     upper_frequency = fields[5]
+    import pandas as pd
+    df = pd.read_csv("spectrogram_results.csv")
+    downsampling_rate = int(df["downsampling_rate"])
+    frame_length = float(df["frame_length_in_s"])
+    frame_step = float(df["frame_step_in_s"])
+    num_mel_bins = int(df["num_mel_bins"])
+    lower_frequency = float(df["lower_frequency"])
+    upper_frequency = float(df["upper_frequency"])
 
-    num_spectrogram_bins = frame_length // 2 + 1
+
+    num_spectrogram_bins = int(frame_length // 2 + 1)
 
     linear_to_mel_weight_matrix = tf.signal.linear_to_mel_weight_matrix(
-        num_mel_bins = num_mel_bins,
-        num_spectrogram_bins = num_spectrogram_bins,
-        downsampling_rate = downsampling_rate,
-        lower_frequency = lower_frequency,
-        upper_frequency = upper_frequency
+        num_mel_bins,
+        num_spectrogram_bins,
+        downsampling_rate,
+        lower_frequency,
+        upper_frequency
     )
 
     monitoring = False
