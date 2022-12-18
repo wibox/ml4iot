@@ -1,16 +1,19 @@
-import psutil
-from time import time, sleep
-from datetime import datetime
-import uuid
 import redis
-from time import time
-import argparse
-import sounddevice as sd
 import tensorflow as tf
 import tensorflow_io as tfio
-import scipy.io.wavfile as siw
-import os
 import numpy as np
+import pandas as pd
+import scipy.io.wavfile as siw
+import sounddevice as sd
+
+from typing import *
+from datetime import datetime
+from glob import glob
+from traceback import *
+import time
+import argparse
+import psutil
+import uuid
 
 def safe_ts_create(redis_client, key):
     try:
@@ -18,30 +21,33 @@ def safe_ts_create(redis_client, key):
     except redis.ResponseError:
         pass
 
-def get_audio_from_numpy(indata):
-    indata = tf.convert_to_tensor(indata, dtype=tf.float32)
-    indata = 2 * ((indata + 32768) / (32767 + 32768)) - 1 
-    indata = tf.squeeze(indata)
-    return indata
+def get_audio_from_nparray(input_data : np.ndarray = None) -> tf.Tensor:
+    try:
+        if input_data:
+            input_data = tf.convert_to_tensor(input_data, dtype=tf.float32)
+            input_data = 2*((input_data+32768)/(32767+32768))-1
+            input_data = tf.squeeze(input_data)
+            return input_data
+        else:
+            raise Exception("NoneType or Empty nparray provided.")
+    except TypeError as te:
+        print(te.format_exc())
+    except Exception as e:
+        print(e.format_exc())
+    finally:
+        return input_data
 
-def get_spectrogram(
-    nparray,
-    downsampling_rate, 
-    frame_length_in_s, 
-    frame_step_in_s,
-    sampling_rate): 
-
-    audio_padded = get_audio_from_numpy(nparray)
+def get_spectrogram(input_data : np.ndarray, downsampling_rate : int, frame_length_in_s : float, frame_step_in_s : float, sampling_rate : int) -> Tuple[Any, int]:
+    audio_padded = get_audio_from_nparray(input_data=input_data)
 
     if sampling_rate != downsampling_rate:
         sampling_rate_int64 = tf.cast(sampling_rate, tf.int64)
         audio_padded = tfio.audio.resample(audio_padded, sampling_rate_int64, downsampling_rate)
-
+     
     sampling_rate_float32 = tf.cast(sampling_rate, tf.float32)
     frame_length = int(frame_length_in_s*sampling_rate_float32)
     frame_step = int(frame_step_in_s*sampling_rate_float32)
 
-    #building the spectrogram
     stft = tf.signal.stft(
         audio_padded,
         frame_length = frame_length,
@@ -53,25 +59,29 @@ def get_spectrogram(
 
     return spectrogram, sampling_rate
 
-def callback(indata, frames, callback_time, status):
-        #mydata = np.array(indata[1], dtype=float)
-        mydata = get_audio_from_numpy(indata)
-        if not is_silence(npdata=mydata, downsampling_rate=16000, frame_length_in_s=0.5, dbFSthresh=-105, duration_time=0.5, sampling_rate= 16000):
-            print("saving_audio")
-            timestamp = time()
-            siw.write(filename=f"recordings/{timestamp}.wav", rate=16000, data=indata)
+def get_ltmwm(num_mel_bins : int, num_spectrogram_bins : int, downsampling_rate : int, lower_frequency : int, upper_frequency : int) -> Any:
+    return tf.signal.linear_to_mel_weight_matrix(num_mel_bins, num_spectrogram_bins, downsampling_rate, lower_frequency, upper_frequency)
 
+def get_mfccs_features(spectrogram : Any, linear_to_mel_weight_matrix : Any, how_many : int = 13) -> tf.Tensor:
+    mel_spectrogram = tf.matmul(spectrogram, linear_to_mel_weight_matrix)
+    log_mel_spectrogram = tf.math.log(mel_spectrogram + 1.e-6)
+    mfccs = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrograms=log_mel_spectrogram)
+    mfccs = mfccs[..., :how_many]
+    mfccs = tf.expand_dims(mfccs, 0)
+    mfccs = tf.expand_dims(mfccs, -1)
+    mfccs = tf.image.resize(mfccs, [32, 32])
 
-def is_silence(npdata, downsampling_rate, frame_length_in_s, dbFSthresh, duration_time, sampling_rate):
-    #audio = get_audio_from_numpy(npdata)
-    #print(type(audio))
+    return mfccs
+
+def is_silence(input_data : np.ndarray, downsampling_rate : int, frame_length_in_s : float,  dbFSthresh : float, sampling_rate : int, duration_time : float):
     spectrogram, _ = get_spectrogram(
-        npdata,
-        downsampling_rate,
-        frame_length_in_s,
-        frame_length_in_s,
-        sampling_rate
+        input_data=input_data,
+        downsampling_rate=downsampling_rate,
+        frame_length_in_s=frame_length_in_s,
+        frame_step_in_s=frame_length_in_s,
+        sampling_rate=sampling_rate
     )
+
     dbFS = 20 * tf.math.log(spectrogram + 1.e-6)
     energy = tf.math.reduce_mean(dbFS, axis=1)
     non_silence = energy > dbFSthresh
@@ -83,86 +93,113 @@ def is_silence(npdata, downsampling_rate, frame_length_in_s, dbFSthresh, duratio
     else:
         return 1
 
-def go_stop_classification(
-    filename, 
-    downsampling_rate, 
-    frame_length,
-    frame_step,
-    linear_to_mel_weight_matrix,
-    interpreter,
-    input_details,
-    output_details,
-    LABELS = ["go","stop"]):
+def callback(indata, frames, callback_time, status):
+        mydata = get_audio_from_nparray(input_data=indata)
+        if not is_silence(input_data=mydata, downsampling_rate=16000, frame_length_in_s=0.04, dbFSthresh=-100, duration_time=0.01, sampling_rate= 16000):
+            timestamp = time.time()
+            siw.write(filename=f"recordings/{timestamp}.wav", rate=16000, data=indata)
 
-    #filename = f"recordings/{tmp}.wav"
-    audio_binary = tf.io.read_file(filename)
-    # path_parts = tf.strings.split(filename, '/')
-    # path_end = path_parts[-1]
-    # file_parts = tf.strings.split(path_end, '_')
-    # true_label = file_parts[0]
-    # true_label = true_label.numpy().decode()
-    
-    audio, sampling_rate = tf.audio.decode_wav(audio_binary) 
+# def format_audio_array(audio_binary : Any):
+#     audio, sampling_rate = tf.audio.decode_wav(audio_binary)
+#     audio = tf.squeeze(audio)
+
+#     # format output
+#     zero_padding = tf.zeros(sampling_rate - tf.shape(audio), dtype=tf.float32)
+#     audio_padded = tf.concat([audio, zero_padding], axis=0)
+
+#     return audio_padded, sampling_rate
+
+def resample_audio_array(audio_padded : Any, downsampling_rate : int) -> Any:
+    return tfio.audio.resample(audio_padded, tf.cast(downsampling_rate, tf.int64), downsampling_rate)
+
+def go_stop_classification(
+    filename : str,
+    downsampling_rate : int,
+    frame_length_in_s : float,
+    frame_step_in_s : float,
+    num_mfccs_features: int,
+    linear_to_mel_weight_matrix : Any,
+    interpreter : tf.lite.Interpreter,
+    input_details : List[Dict[str, Any]],
+    output_details : List[Dict[str, Any]],
+    labels : List[str]
+) -> Union[str, None]:
+
+    # audio_binary = tf.io.read_file(filename)
+    # audio_padded, sampling_rate = format_audio_array(audio_binary=audio_binary)
+
+    audio_binary = siw.read(filename)
+    sampling_rate, audio = audio_binary[0], audio_binary[1]
     audio = tf.squeeze(audio)
     zero_padding = tf.zeros(sampling_rate - tf.shape(audio), dtype=tf.float32)
     audio_padded = tf.concat([audio, zero_padding], axis=0)
 
-    if downsampling_rate != sampling_rate:
-        audio_padded = tfio.audio.resample(audio_padded, tf.cast(downsampling_rate, tf.int64), downsampling_rate)
+    if sampling_rate != downsampling_rate:
+        audio_padded = resample_audio_array(audio_padded=audio_padded, downsampling_rate=downsampling_rate)
 
-    stft = tf.signal.stft(
-        audio_padded, 
-        frame_length=frame_length,
-        frame_step=frame_step,
-        fft_length=frame_length
+    spectrogram, _ = get_spectrogram(
+        input_data=audio_padded,
+        downsampling_rate=downsampling_rate,
+        frame_length_in_s=frame_length_in_s,
+        frame_step_in_s=frame_step_in_s,
+        sampling_rate=sampling_rate
     )
-    spectrogram = tf.abs(stft)
-    mel_spectrogram = tf.matmul(spectrogram, linear_to_mel_weight_matrix)
-    # log_mel_spectrogram = tf.math.log(mel_spectrogram + 1.e-6)
-    # log_mel_spectrogram = tf.expand_dims(log_mel_spectrogram, 0)
-    # log_mel_spectrogram = tf.expand_dims(log_mel_spectrogram, -1)
-    # log_mel_spectrogram = tf.image.resize(log_mel_spectrogram, [32, 32])
-    log_mel_spectrogram = tf.math.log(mel_spectrogram + 1.e-6)
-    mfccs = mfccs = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrogram)[..., :13]
-    mfccs = tf.expand_dims(mfccs, 0)
-    mfccs = tf.expand_dims(mfccs, -1)
-    mfccs = tf.image.resize(mfccs, [32, 32])
-    
-    #interpreter.set_tensor(input_details[0]['index'], log_mel_spectrogram) 
-    interpreter.set_tensor(input_details[0]['index'], mfccs) 
+
+    mfccs_features = get_mfccs_features(spectrogram=spectrogram, linear_to_mel_weight_matrix=linear_to_mel_weight_matrix, how_many=num_mfccs_features)
+    interpreter.set_tensor(input_details[0]['index'], mfccs_features)
     interpreter.invoke()
     output = interpreter.get_tensor(output_details[0]['index'])
 
-    if output[0] > 0.95:
-        top_index = np.argmax(output[0])
-        predicted_label = LABELS[top_index]
+    if np.max(output[0]) > .95:
+        return labels[np.argmax(output[0])]
     else:
-        predicted_label = None
-    
-    return predicted_label
+        return None
 
+def redis_connection(args) -> Tuple[bool, redis.Redis]:
+    print("Connecting...")
+    redis_client = redis.Redis(
+        host = args.host, 
+        password = args.password, 
+        username = args.user, 
+        port = args.port
+        )
+    result = redis_client.ping()
+    print("Is connected? ", result)
+    return result, redis_client
 
-def main():
+def load_task_details(model_name : str):
+    interpreter = tf.lite.Interpreter(model_path=f"{model_name}.tflite")
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+
+    return interpreter, input_details, output_details
+
+def load_parameters_from_csv(filepath : str) -> bool:
+    df = pd.read_csv(filepath)
+    downsampling_rate = int(df["downsampling_rate"])
+    frame_length_in_s = float(df["frame_length_in_s"])
+    frame_step_in_s = float(df["frame_step_in_s"])
+    num_mel_bins = int(df["num_mel_bins"])
+    lower_frequency = float(df["lower_frequency"])
+    upper_frequency = float(df["upper_frequency"])
+    num_mfccs_features = int(df["num_mfccs_features"])
+    return downsampling_rate, frame_length_in_s, frame_step_in_s, num_mel_bins, lower_frequency, upper_frequency, num_mfccs_features
+
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type = str, default = "redis-15072.c77.eu-west-1-1.ec2.cloud.redislabs.com")
     parser.add_argument("--port", type = int, default = 15072)
     parser.add_argument("--user", type = str, default = "default")
     parser.add_argument("--password", type = str, default = "53R8YAlL81zAHIEVcPjwjzcnVQoSPhzt")
-    parser.add_argument("--device", type = int, default = 1)  #### rivedere questo
+    parser.add_argument("--device", type = int, default = 12)
+    parser.add_argument("--model-name", type=str, default="model")
+    parser.add_argument("--csv-path", type=str, default="spectrogram_results.csv")
     args = parser.parse_args()
+    
+    result, redis_client = redis_connection(args=args)
 
-    print("Connecting...")
-
-    redis_client = redis.Redis(
-        host = args.host, 
-        password = args.password, 
-        username = args.user, 
-        port = args.port)
-
-
-    print("Is connected? ", redis_client.ping())
-
-    ts_in_s = time()
+    ts_in_s = time.time()
     ts_in_ms = int(ts_in_s*1000)
     mac_id = hex(uuid.getnode())
     battery_level = psutil.sensors_battery().percent
@@ -174,79 +211,45 @@ def main():
     safe_ts_create(redis_client, "mac_adress:battery")
     safe_ts_create(redis_client, "mac_adress:power")
 
+    interpreter, input_details, output_details = load_task_details(model_name=args.model_name)
+    downsamplig_rate, frame_length_in_s, frame_step_in_s, num_mel_bins, lower_frequency, upper_frequency, num_mfccs_features= load_parameters_from_csv(filepath=args.csv_path)
+    num_spectrogram_bins = int(int(frame_length_in_s*tf.cast(downsamplig_rate, tf.float32)) // 2 + 1)
+    linear_to_mel_weight_matrix = get_ltmwm(num_mel_bins=num_mel_bins, num_spectrogram_bins=num_spectrogram_bins, downsampling_rate=downsamplig_rate, lower_frequency=lower_frequency, upper_frequency=upper_frequency)
 
-    MODEL_NAME = 1671182140 #### NOME A OCCHIO
-    interpreter = tf.lite.Interpreter(model_path=f'tflite_models/{MODEL_NAME}.tflite')
-    interpreter.allocate_tensors()
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-
-    # with open("spectrogram_results.csv", "r") as csvf:
-    #     header = next(csvf)
-    #     fields = str(csvf).split(",")
-    #     print(fields)
-    #     downsampling_rate = fields[0]
-    #     frame_length = fields[1]
-    #     frame_step = fields[2]
-    #     num_mel_bins = fields[3]
-    #     lower_frequency = fields[4]
-    #     upper_frequency = fields[5]
-    import pandas as pd
-    df = pd.read_csv("spectrogram_results.csv")
-    downsampling_rate = int(df["downsampling_rate"])
-    frame_length = float(df["frame_length_in_s"])
-    frame_step = float(df["frame_step_in_s"])
-    num_mel_bins = int(df["num_mel_bins"])
-    lower_frequency = float(df["lower_frequency"])
-    upper_frequency = float(df["upper_frequency"])
-
-
-    num_spectrogram_bins = int(frame_length // 2 + 1)
-
-    linear_to_mel_weight_matrix = tf.signal.linear_to_mel_weight_matrix(
-        num_mel_bins,
-        num_spectrogram_bins,
-        downsampling_rate,
-        lower_frequency,
-        upper_frequency
-    )
-
-    monitoring = False
-
-    with sd.InputStream(device=args.device, channels=1, samplerate=16000, dtype="int16", callback=callback, blocksize=16000):
-        print("Recording...")
+    info_monitoring = False
+    
+    with sd.InputStream(device=args.device, channels=1, samplerate=16000, dtype="float32", callback=callback, blocksize=16000):
+        print("Recording audio...")
         while True:
-            tmp = time()
-            if os.path.exists(f"recordings/{tmp}.wav"):
-
-                print("Classifying...")
-
+            for audiofile in glob("recordings/*.wav"):
                 predicted_label = go_stop_classification(
-                    f"recordings/{tmp}.wav", 
-                    downsampling_rate, 
-                    frame_length,
-                    frame_step,
-                    linear_to_mel_weight_matrix,
-                    interpreter,
-                    input_details,
-                    output_details,
-                    LABELS = ["go","stop"])
+                    filename=audiofile,
+                    downsampling_rate=downsamplig_rate,
+                    frame_length_in_s=frame_length_in_s,
+                    frame_step_in_s=frame_step_in_s,
+                    num_mfccs_features = num_mfccs_features,
+                    linear_to_mel_weight_matrix=linear_to_mel_weight_matrix,
+                    interpreter=interpreter,
+                    input_details=input_details,
+                    output_details=output_details,
+                    labels=["go", "stop"]
+                )
+                print(predicted_label)
 
                 if predicted_label == "go":
-                    print(predicted_label)
-                    monitoring = True
+                    info_monitoring = True
+                    print("Starting battery monitoring system.")
                 elif predicted_label == "stop":
-                    print(predicted_label)
-                    monitoring = False 
-                elif predicted_label == None:
-                    print("Label not found.")
+                    info_monitoring = False
+                    print("Stopping battery monitoring system.")
+                elif predicted_label is None:
+                    # print("Could not resolve classification task.")
                     continue
-            
-            if monitoring:
-                redis_client.ts().add("mac_adress:battery", ts_in_ms, battery_level)
-                redis_client.ts().add("mac_adress:power",ts_in_ms, int(power_plugged))
 
-            sleep(1)
+                if info_monitoring:
+                    redis_client.ts().add("mac_adress:battery", ts_in_ms, battery_level)
+                    redis_client.ts().add("mac_adress:power",ts_in_ms, int(power_plugged))
+            time.sleep(1)
 
 if __name__ == "__main__":
     main()
