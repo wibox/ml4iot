@@ -1,0 +1,2 @@
+,downsampling_rate,frame_length_in_s,frame_step_in_s,num_mel_bins,lower_frequency,upper_frequency,batch_size,epochs,initial_learning_rate,end_learning_rate,num_mfccs_features,alpha,accuracy,avg_preprocessing_latency,avg_model_latency,median_total_latency,model_size,compressed_model_size
+4,16000,0.02,0.02,20,20,4000,20,15,0.01,0.00001,13,0.15,97.5,7.6,0.1,7.2,30.2,12.3

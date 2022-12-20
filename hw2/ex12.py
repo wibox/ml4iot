@@ -14,6 +14,7 @@ import time
 import argparse
 import psutil
 import uuid
+import os
 
 def safe_ts_create(redis_client, key):
     try:
@@ -99,16 +100,6 @@ def callback(indata, frames, callback_time, status):
             timestamp = time.time()
             siw.write(filename=f"recordings/{timestamp}.wav", rate=16000, data=indata)
 
-# def format_audio_array(audio_binary : Any):
-#     audio, sampling_rate = tf.audio.decode_wav(audio_binary)
-#     audio = tf.squeeze(audio)
-
-#     # format output
-#     zero_padding = tf.zeros(sampling_rate - tf.shape(audio), dtype=tf.float32)
-#     audio_padded = tf.concat([audio, zero_padding], axis=0)
-
-#     return audio_padded, sampling_rate
-
 def resample_audio_array(audio_padded : Any, downsampling_rate : int) -> Any:
     return tfio.audio.resample(audio_padded, tf.cast(downsampling_rate, tf.int64), downsampling_rate)
 
@@ -124,9 +115,6 @@ def go_stop_classification(
     output_details : List[Dict[str, Any]],
     labels : List[str]
 ) -> Union[str, None]:
-
-    # audio_binary = tf.io.read_file(filename)
-    # audio_padded, sampling_rate = format_audio_array(audio_binary=audio_binary)
 
     audio_binary = siw.read(filename)
     sampling_rate, audio = audio_binary[0], audio_binary[1]
@@ -151,8 +139,10 @@ def go_stop_classification(
     output = interpreter.get_tensor(output_details[0]['index'])
 
     if np.max(output[0]) > .95:
+        os.remove(f"{filename}")
         return labels[np.argmax(output[0])]
     else:
+        os.remove(f"{filename}")
         return None
 
 def redis_connection(args) -> Tuple[bool, redis.Redis]:
@@ -176,29 +166,21 @@ def load_task_details(model_name : str):
     return interpreter, input_details, output_details
 
 def load_parameters_from_csv(filepath : str) -> bool:
-    df = pd.read_csv(filepath)
-    downsampling_rate = int(df["downsampling_rate"])
-    frame_length_in_s = float(df["frame_length_in_s"])
-    frame_step_in_s = float(df["frame_step_in_s"])
-    num_mel_bins = int(df["num_mel_bins"])
-    lower_frequency = float(df["lower_frequency"])
-    upper_frequency = float(df["upper_frequency"])
-    num_mfccs_features = int(df["num_mfccs_features"])
-    return downsampling_rate, frame_length_in_s, frame_step_in_s, num_mel_bins, lower_frequency, upper_frequency, num_mfccs_features
+    try:
+        df = pd.read_csv(filepath)
+        downsampling_rate = int(df["downsampling_rate"])
+        frame_length_in_s = float(df["frame_length_in_s"])
+        frame_step_in_s = float(df["frame_step_in_s"])
+        num_mel_bins = int(df["num_mel_bins"])
+        lower_frequency = float(df["lower_frequency"])
+        upper_frequency = float(df["upper_frequency"])
+        num_mfccs_features = int(df["num_mfccs_features"])
+    except Exception:
+        print("spectrogram_results.csv not found. Please download it from the provided notebook on DeepNote or run the provided training.ipynb.")
+    finally:
+        return downsampling_rate, frame_length_in_s, frame_step_in_s, num_mel_bins, lower_frequency, upper_frequency, num_mfccs_features
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type = str, default = "redis-15072.c77.eu-west-1-1.ec2.cloud.redislabs.com")
-    parser.add_argument("--port", type = int, default = 15072)
-    parser.add_argument("--user", type = str, default = "default")
-    parser.add_argument("--password", type = str, default = "53R8YAlL81zAHIEVcPjwjzcnVQoSPhzt")
-    parser.add_argument("--device", type = int, default = 12)
-    parser.add_argument("--model-name", type=str, default="model")
-    parser.add_argument("--csv-path", type=str, default="spectrogram_results.csv")
-    args = parser.parse_args()
-    
-    result, redis_client = redis_connection(args=args)
-
+def update_informations() -> Tuple[float, float, bool]:
     ts_in_s = time.time()
     ts_in_ms = int(ts_in_s*1000)
     mac_id = hex(uuid.getnode())
@@ -207,6 +189,21 @@ def main() -> None:
     formatted_datetime = datetime.fromtimestamp(ts_in_s)
     print(f"{formatted_datetime} - {mac_id}: battery level ", battery_level)
     print(f"{formatted_datetime} - {mac_id}: power plugged: ", power_plugged)
+
+    return ts_in_ms, battery_level, power_plugged
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", type = str, default = "redis-15072.c77.eu-west-1-1.ec2.cloud.redislabs.com")
+    parser.add_argument("--port", type = int, default = 15072)
+    parser.add_argument("--user", type = str, default = "default")
+    parser.add_argument("--password", type = str, default = "53R8YAlL81zAHIEVcPjwjzcnVQoSPhzt")
+    parser.add_argument("--device", type = int, default = 12)
+    parser.add_argument("--model-name", type=str, default="model_7")
+    parser.add_argument("--csv-path", type=str, default="spectrogram_results.csv")
+    args = parser.parse_args()
+    
+    _, redis_client = redis_connection(args=args)
     
     safe_ts_create(redis_client, "mac_adress:battery")
     safe_ts_create(redis_client, "mac_adress:power")
@@ -217,7 +214,10 @@ def main() -> None:
     linear_to_mel_weight_matrix = get_ltmwm(num_mel_bins=num_mel_bins, num_spectrogram_bins=num_spectrogram_bins, downsampling_rate=downsamplig_rate, lower_frequency=lower_frequency, upper_frequency=upper_frequency)
 
     info_monitoring = False
-    
+
+    if not os.path.exists("recordings/"):
+        os.makedirs("recordings")
+
     with sd.InputStream(device=args.device, channels=1, samplerate=16000, dtype="float32", callback=callback, blocksize=16000):
         print("Recording audio...")
         while True:
@@ -247,6 +247,7 @@ def main() -> None:
                     continue
 
                 if info_monitoring:
+                    ts_in_ms, battery_level, power_plugged = update_informations()
                     redis_client.ts().add("mac_adress:battery", ts_in_ms, battery_level)
                     redis_client.ts().add("mac_adress:power",ts_in_ms, int(power_plugged))
             time.sleep(1)
