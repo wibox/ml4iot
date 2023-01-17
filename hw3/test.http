@@ -1,0 +1,19 @@
+@host = http://localhost:8080
+###
+GET {{host}}/devices
+
+# corret request
+###
+GET {{host}}/device/0xff436e8d681f?from=1673949559106&to=1673949563579
+
+# bad mac address request
+###
+GET {{host}}/device/1240?from=1673949559106&to=1673949563579
+
+# missing from time
+###
+GET {{host}}/device/0xff436e8d681f?from=&to=1673949563579
+
+# missing end time
+###
+GET {{host}}/device/0xff436e8d681f?from=1673949559106&to=
