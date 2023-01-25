@@ -29,31 +29,41 @@ Pagano Francesco\\
 
 \section{Exercise 1}
 
-In the report, explain why MQTT is a better choice than REST as the communication protocol for
-this application.
+%In the report, explain why MQTT is a better choice than REST as the communication protocol for this application.
+Since we are trying to emulate the behavior of various IoT devices that send data about their functioning status to a server, the choices fall upon a REST architecture or a MQTT message protocol for the communication between devices and the general reciever. REST (REpresentational State Transfer) is a web application architecture which enables to work with a variety of data, like media, objects or documents over HTTP; it allows easy scalability and dynamism in development time as well as modifiability of interacting components at runtime and easy portability. MQTT, on the other hand, is a network messaging protocol which allows communication between devices over TCP/IP and follows a publisher-subscriber model and requires the employment of a Broker to correctly retrieve and redirect messages. Despite us dealing with Deepnote, our purpose is to simulate the behavior of various IoT devices communicating with each other, sending and recieving information about battery level and power status constantly; with this perspective in mind, one has to focus on power optimization and efficient communication between parts, and MQTT is the optimal choice to accomplish this: with its protocol header of just \textit{$2$ bytes} and its easy implementation, MQTT allows for a lower usage of the device's battey in order to implement effective and continous communication, which, eventually, results in less maintenance and lowered costs.
+
 
 \section{Exercise 2}
 
-In the report, fill the following table selecting the most suitable HTTP method (GET, POST, PUT, or DELETE) for each row and motivate your answer.
+%In the report, fill the following table selecting the most suitable HTTP method (GET, POST, PUT, or DELETE) for each row and motivate your answer.
 
-Ho introdotto i Ref n° per poter descriverli e spiegare le motivazioni più semplicemente.
+%Ho introdotto i Ref n° per poter descriverli e spiegare le motivazioni più semplicemente.
 
-\medskip
+In order to develop this API, the implemented strategy was to store information about each device in redis's timeseries with the following format: \textit{{mac\_address}:battery} and \textit{{mac\_address}:power\_plugged}. In order to manage such information, the follwing endpoint were developed:
+\begin{itemize}
+	\item \textbf{/devices} Retrieves the list of MAC addresses of monitored devices.
+	\item \textbf{/device/mac\_address} Retrieves and manages battery status information (battery level and power plugged status) about the device with the specified MAC address.
+\end{itemize}
 
-\begin{centering}
+\begin{table}[h!]
+	\centering
 \begin{tabular}{|c|c|c|}
 \hline
 \textbf{Method} & \textbf{Endopoint} & \textbf{Ref n°}\\
 \hline
-	& /devices & (1)	\\
+GET	& /devices & (1)	\\
 \hline
-	& /device/{mac\_address} &	(2)\\
+GET	& /device/{mac\_address} &	(2)\\
 \hline
-	& /device/{mac\_address} & 	(3)\\
+DELETE	& /device/{mac\_address} & 	(3)\\
 \hline
 \end{tabular}
-\end{centering}
+\end{table}
 
-
+\begin{enumerate}
+	\item The endpoint \textbf{/devices} implements a \textit{GET} method in order to retrieve information about MAC addresses of monitored devices contained inside the corresponding Redis time series, in JSON format.
+	\item The endpoint \textbf{/device/mac\_address} also implements a \textit{GET} method in order to retrieve information about the battery level and power plugged status within a specified time-range (stated in the query) of the device stated in the call. 
+	\item In order to delete information about a specific MAC address, the endpoint \textbf{/device/mac\_address} also implements a \textit{DELETE} method which tells the Redis database to delete timeseries corresponding to the MAC address stated in the call.
+\end{enumerate}
 
 \end{document}

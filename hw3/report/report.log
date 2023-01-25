@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.24 (MiKTeX 22.11.25) (preloaded format=pdflatex 2023.1.25)  25 JAN 2023 10:31
+This is pdfTeX, Version 3.141592653-2.6-1.40.24 (MiKTeX 22.11.25) (preloaded format=pdflatex 2023.1.25)  25 JAN 2023 11:47
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -253,18 +253,31 @@ Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
 (C:\Users\franc\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epstopdf-sys.c
 fg
 File: epstopdf-sys.cfg 2021/03/18 v2.0 Configuration of epstopdf for MiKTeX
-)) [1
+))
+Overfull \hbox (0.1601pt too wide) in paragraph at lines 42--43
+\OT1/cmr/m/n/10 in re-dis's time-series with the fol-low-ing for-mat: \OT1/cmr/
+m/it/10 mac[]address:battery \OT1/cmr/m/n/10 and \OT1/cmr/m/it/10 mac[]address:
+power[]plugged\OT1/cmr/m/n/10 .
+ []
+
+
+Overfull \hbox (19.77391pt too wide) in paragraph at lines 66--67
+[]\OT1/cmr/m/n/10 In or-der to delete in-for-ma-tion about a spe-cific MAC ad-d
+ress, the end-point \OT1/cmr/bx/n/10 /de-vice/mac[]address
+ []
+
+[1
 
 {C:/Users/franc/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}]
 (report.aux) ) 
 Here is how much of TeX's memory you used:
- 3588 strings out of 475284
- 58874 string characters out of 2774105
- 425873 words of memory out of 3000000
+ 3589 strings out of 475284
+ 58889 string characters out of 2774105
+ 431864 words of memory out of 3000000
  25052 multiletter control sequences out of 15000+600000
- 475656 words of font info for 50 fonts, out of 8000000 for 9000
+ 476002 words of font info for 51 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 55i,7n,62p,225b,249s stack positions out of 10000i,1000n,20000p,200000b,80000s
+ 55i,9n,62p,1473b,274s stack positions out of 10000i,1000n,20000p,200000b,80000s
  <C:\Users\franc\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec
 /dpi600\tcbx1000.pk> <C:\Users\franc\AppData\Local\MiKTeX\fonts/pk/ljfour/jknap
 pen/ec/dpi600\tcrm1000.pk><C:/Users/franc/AppData/Local/Programs/MiKTeX/fonts/t
@@ -273,10 +286,12 @@ X/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C:/Users/franc/AppData/Local/Progr
 ams/MiKTeX/fonts/type1/public/amsfonts/cm/cmr10.pfb><C:/Users/franc/AppData/Loc
 al/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/Users/franc/App
 Data/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr17.pfb><C:/Users/f
-ranc/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmti12.pfb>
-Output written on report.pdf (1 page, 79648 bytes).
+ranc/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmti10.pfb><C
+:/Users/franc/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmti
+12.pfb>
+Output written on report.pdf (1 page, 99639 bytes).
 PDF statistics:
- 46 PDF objects out of 1000 (max. 8388607)
+ 51 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 
